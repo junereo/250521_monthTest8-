@@ -5,6 +5,7 @@
       "module": "ESNext",
       "moduleResolution": "Node",
       "strict": true,
+      "resolveJsonModule": true,      // ✅ .json 모듈 import 허용
       "esModuleInterop": true,
       "skipLibCheck": true,
       "forceConsistentCasingInFileNames": true,

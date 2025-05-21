@@ -1,7 +1,15 @@
 import React from 'react';
+import Tomak from './tomak';
 
-const App = () => {
-  return <h1>Hello, Vite + React + TypeScript!</h1>;
-};
+function App() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <h1 className="text-4xl font-bold text-blue-500">
+        Hello, Tailwind CSS 4.0!
+        <Tomak/>
+      </h1>
+    </div>
+  );
+}
 
 export default App;

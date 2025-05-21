@@ -2,7 +2,7 @@
   "name": "250521-monthtest8",
   "private": true,
   "version": "0.0.0",
-  "type": "module",
+  "type": "commonjs",
   "description": "NFT 마켓 플레이스",
   "scripts": {
     "dev": "vite --port 8000 --strict-port",
