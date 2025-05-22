@@ -3,7 +3,7 @@ import { AbiItem } from 'web3-utils';
 import TomakNFT from '../../truffle/build/contracts/TomakNFT.json';
 
 const getContract = () => {
-  const tomakNftTokenAddress = '0x7204a101b6a6ebd994770df40e5c30f1fa6cfe41';
+  const tomakNftTokenAddress = '0xdbE51Fb8B28C4a0C4Ac14168B4cCfd036EC82e2F';
   const web3 = new Web3(window.ethereum);
 
   const tomakNftTokenContract = new web3.eth.Contract(

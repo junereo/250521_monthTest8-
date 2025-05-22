@@ -3,15 +3,19 @@ import getContract from './getContract';
 import Web3 from 'web3';
 import axios from 'axios';
 
+type TokenInfoResult = {
+  tokenIds: string[];
+  uris: string[];
+};
+
 const Tomak = () => {
   const [account, setAccount] = useState('');
   const [tokenId, setTokenId] = useState('');
-  const [itemType, setitemType] = useState('');
   const [web3, setWeb3] = useState<Web3>();
-  const [myNfts, setMyNfts] = useState<{ tokenId: string; image: string }[]>(
+  const [myNfts, setMyNfts] = useState<{ tokenId: string; image: string, itemType:bigint, index:bigint }[]>(
     []
   );
-  const [allNfts, setAllNfts] = useState<{ tokenId: string; image: string; owner: string }[]>([]);
+  const [allNfts, setAllNfts] = useState<{ tokenId: string, image: string, itemType:bigint, index:bigint, owner: string }[]>([]);
 
   const { 
     tomakNftTokenAddress, 
@@ -38,7 +42,7 @@ const Tomak = () => {
   const minting = async () => {
     if (!web3) return;
     try {
-      await tomakNftTokenContract.methods.minting(tokenId).send({
+      await tomakNftTokenContract.methods.minting(tokenId, String("")).send({
         from: account
       });
       alert("NFT 발급 완료");
@@ -50,28 +54,23 @@ const Tomak = () => {
   const loadMyNFTsWithoutEnumerable = async() => {
     if(!web3 || !account) return;
     try {
-      // 일단 총 발행량 확인
-      // for문을 여기다가 돌리겠습니다.
-      const maxTokenId:number = await tomakNftTokenContract.methods.getTotalSupply().call();
-      const found: { tokenId:string, image: string}[] = [];
-      // 지금 컨트랙트에 있는 NFT는 2개 발행했으니 총 발행량이 2
-      for(let id:number = 0; id < maxTokenId; id++) {
+
+      const maxTokenId:bigint[] = await tomakNftTokenContract.methods.getOwnedTokenIds(account).call();
+
+      console.log("maxTokenId", maxTokenId.length);
+      const found: { tokenId:string, image: string, itemType:bigint, index:bigint }[] = [];
+      for(let id:number = 0; id < maxTokenId.length; id++) {
         try {
-          // 내 NFT니까 ownerOf로 id 전달하여 address를 가져오고 내 상태와 비교
-          const owner:string = await tomakNftTokenContract.methods.ownerOf(id).call();
+          const owner:string = await tomakNftTokenContract.methods.ownerOf(maxTokenId[id]).call();
           if(owner.toLowerCase() === account.toLowerCase()) {
-            // ipfs://bafybeif4zdkotbumzuh6pxv5fjcvn3f4ajsqn74kiggelsskk6t5iqjsse/0.json
-            const uri:string = await tomakNftTokenContract.methods.tokenURI(id).call();
-            // https://ipfs.io/ipfs/로 변환 
+            const uri:string = await tomakNftTokenContract.methods.tokenURI(maxTokenId[id]).call();
             const metadataUri = uri.replace("ipfs://", "https://ipfs.io/ipfs/");
-            // https://ipfs.io/ipfs/bafybeif4zdkotbumzuh6pxv5fjcvn3f4ajsqn74kiggelsskk6t5iqjsse/0.json
             const { data } = await axios.get(metadataUri);
             const image = data.image.replace("ipfs://", "https://ipfs.io/ipfs/");
-            // https://ipfs.io/ipfs/bafybeif4zdkotbumzuh6pxv5fjcvn3f4ajsqn74kiggelsskk6t5iqjsse/0.png
-            found.push({ tokenId: id.toString(), image});
+            const { itemType, index } = decodeTokenId(maxTokenId[id]);
+            found.push({ tokenId: maxTokenId[id].toString(), image, itemType, index});
           }
         } catch (error) {
-          // 해당 맥락은, 해당하는 내 토큰을 못찾았을 때, 다음 토큰을 찾을 수 있게끔 하는 코드
           console.log(error);
           continue;
         }
@@ -87,11 +86,16 @@ const Tomak = () => {
   if (!web3 || !account) return;
 
   try {
-    const total: any = await tomakNftTokenContract.methods.getAllTokenIds().call();
-    const found: { tokenId: string; image: string; owner: string }[] = [];
+    const result = await tomakNftTokenContract.methods.getAllTokenInfos().call() as TokenInfoResult;
+    const found: { tokenId: string, image: string, itemType:bigint, index:bigint, owner: string }[] = [];
+    const tokenIds: bigint[] = result.tokenIds.map((id: string) => BigInt(id));
+    const uris: string[] = result.uris;
+    console.log("result", result);
+    console.log("tokenIds", tokenIds);
+    console.log("uris", uris);
 
-    for (let i = 0; i < total.length; i++) {
-      const tokenId = total[i];
+    for (let i = 0; i < tokenIds.length; i++) {
+      const tokenId = tokenIds[i];
       try {
         const owner:string = await tomakNftTokenContract.methods.ownerOf(tokenId).call();
         const uri:string = await tomakNftTokenContract.methods.tokenURI(tokenId).call();
@@ -99,7 +103,9 @@ const Tomak = () => {
         const metadataUrl = uri.replace('ipfs://', 'https://ipfs.io/ipfs/');
         const { data } = await axios.get(metadataUrl);
         const image = data.image.replace('ipfs://', 'https://ipfs.io/ipfs/');
-        found.push({ tokenId: tokenId.toString(), image, owner,});
+        const { itemType, index } = decodeTokenId(tokenId);
+
+        found.push({ tokenId: tokenId.toString(), image, itemType, index, owner});
       } catch (err) {
         console.log(err)
         continue;
@@ -122,9 +128,31 @@ const Tomak = () => {
     }
   }
 
+  const approveAllOwnedTokens = async () => {
+    if (!web3 || !account) return;
+  
+    try {
+      const tokenIds: string[] = await tomakNftTokenContract.methods
+        .getOwnedTokenIds(account)
+        .call();
+  
+      for (const tokenId of tokenIds) {
+        await tomakNftTokenContract.methods
+          .approve(tomakNftTokenAddress, tokenId)
+          .send({ from: account });
+  
+        console.log(`Token ID ${tokenId} 승인 완료`);
+      }
+  
+      alert("모든 NFT 개별 승인 완료");
+    } catch (error) {
+      console.error("일괄 승인 실패", error);
+    }
+  };
+
   const purchaseNFT = async(tokenId: string) => {
     if(!web3 || !account) return;
-    const price = web3.utils.toWei("1", "ether");
+    const price = web3.utils.toWei("0.0001", "ether");
     try {
       await tomakNftTokenContract.methods.purchase(tokenId).send({
         from: account,
@@ -134,6 +162,16 @@ const Tomak = () => {
     } catch (error) {
       console.log(error);
     }
+  }
+
+  function decodeTokenId(tokenId: bigint): { itemType: bigint; index: bigint } {
+    const shiftBits = 128n;
+    const mask = (1n << shiftBits) - 1n;
+  
+    const itemType = tokenId >> shiftBits;
+    const index = tokenId & mask;
+  
+    return { itemType, index };
   }
 
   return (
@@ -174,7 +212,8 @@ const Tomak = () => {
   
       {/* 내가 가진 NFT들 */}
       <section className="p-4 rounded-xl bg-gray-100 shadow space-y-3">
-        <div className="flex justify-between items-center">
+        <div>
+          <div className="flex justify-between items-center">
           <h2 className="text-lg font-semibold">📦 내 NFT 보유 목록</h2>
           <button
             onClick={loadMyNFTsWithoutEnumerable}
@@ -182,6 +221,19 @@ const Tomak = () => {
           >
             이미지 가져오기
           </button>
+          </div>
+          <div>
+          {myNfts.length === 0 ? (
+              <p className="text-sm text-gray-500">NFT 없음</p>
+            ) : (
+
+                <button
+                  onClick={() => approveAllOwnedTokens()}
+                  className="mt-2 w-full text-sm py-1 px-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
+                >
+                  모두 판매하려고 내놓기
+                </button>)}
+          </div>
         </div>
   
         {myNfts.length === 0 ? (
@@ -196,6 +248,8 @@ const Tomak = () => {
                   className="w-full h-auto rounded-md"
                 />
                 <p className="mt-2 text-sm font-medium">Token ID: {nft.tokenId}</p>
+                <p className="text-sm font-medium">ItemType: {nft.itemType}</p>
+                <p className="text-sm font-medium">Mint Number: {nft.index}</p>
                 <button
                   onClick={() => approveToken(nft.tokenId)}
                   className="mt-2 w-full text-sm py-1 px-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
@@ -232,6 +286,9 @@ const Tomak = () => {
                   className="w-full h-auto rounded-md"
                 />
                 <p className="mt-2 text-sm font-medium">Token ID: {nft.tokenId}</p>
+                <p className="text-sm font-medium">ItemType: {nft.itemType}</p>
+                <p className="text-sm font-medium">Mint Number: {nft.index}</p>
+
                 <p className="text-xs text-gray-600">소유자: {nft.owner}</p>
                 {nft.owner.toLowerCase() !== account.toLowerCase() && (
                   <button

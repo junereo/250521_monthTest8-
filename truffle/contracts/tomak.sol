@@ -39,6 +39,24 @@ contract TomakNFT is ERC721Enumerable, Ownable{
         baseURIs[itemType] = uri;
     }
 
+    function purchase(uint256 tokenId) public payable {
+        require(_ownerOf(tokenId) != address(0), "TomakNFT: URI query for nonexistent token");
+        address currentOwner = ownerOf(tokenId);
+        require(currentOwner != msg.sender, "You Already Own this token");
+        require(
+            getApproved(tokenId) == address(this) || isApprovedForAll(currentOwner, address(this)),
+            "Contract not approved for transfer"
+        );
+        require(msg.value == 0.0001 ether, "Price is 0.0001 ether");
+
+        // 이더 전송
+        payable(currentOwner).transfer(msg.value);
+
+        // 이 컨트랙트가 대신 소유권 이전
+        // from, to, tokenId
+        _transfer(currentOwner, msg.sender, tokenId);
+    }
+
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         require(_ownerOf(tokenId) != address(0), "TomakNFT: URI query for nonexistent token");
 
@@ -60,5 +78,26 @@ contract TomakNFT is ERC721Enumerable, Ownable{
 
     function getMintedCountByItemType(uint256 itemType) external view returns (uint256) {
         return itemTypeMintCount[itemType];
+    }
+
+    //현재 내가 보유중인 nft
+    function getOwnedTokenIds(address owner) external view returns (uint256[] memory) {
+        uint256 count = balanceOf(owner);
+        uint256[] memory tokenIds = new uint256[](count);
+        for (uint256 i = 0; i < count; i++) {
+            tokenIds[i] = tokenOfOwnerByIndex(owner, i);
+        }
+        return tokenIds;
+    }
+
+    function getAllTokenInfos() external view returns (uint256[] memory tokenIds, string[] memory uris) {
+        uint256 total = totalSupply();
+        tokenIds = new uint256[](total);
+        uris = new string[](total);
+        for (uint256 i = 0; i < total; i++) {
+            uint256 tokenId = tokenByIndex(i);
+            tokenIds[i] = tokenId;
+            uris[i] = tokenURI(tokenId);
+        }
     }
 }
